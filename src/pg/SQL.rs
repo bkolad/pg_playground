@@ -1,27 +1,4 @@
-pub static CREATE_ACCOUNT_OWNER: &str = "
-CREATE TABLE IF NOT EXISTS account_owner(
-    id              SERIAL PRIMARY KEY
-    )";
-
-pub static CREATE_ACCOUNT_DEFINITION: &str = "
-CREATE TABLE IF NOT EXISTS account_definition (
-    account_id      INT,
-    batch_id        INT NOT NULL,
-    PRIMARY KEY (account_id),
-    FOREIGN KEY (account_id) REFERENCES account_owner(id)
-    )";
-
-pub static CREATE_ACCOUNT_STATE: &str = "
-CREATE TABLE IF NOT EXISTS account_state (
-    account_id      INT,
-    nonce           INT NOT NULL,
-    balance         BIGINT NOT NULL,
-    PRIMARY KEY (account_id),
-    FOREIGN KEY (account_id) REFERENCES account_owner(id)
-    )";
-
-pub static DROP_ACCOUNT_STATE: &str = "DROP TABLE account_state";
-pub static DROP_ACCOUNT_OWNER: &str = "DROP TABLE account_owner";
+pub static DROP_DUMMY_TABLE: &str = "DROP TABLE dummy_table";
 
 pub static DUMMY_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS dummy_table (
@@ -29,3 +6,18 @@ CREATE TABLE IF NOT EXISTS dummy_table (
     nonce            INT NOT NULL,
     balance          BIGINT NOT NULL
     )";
+
+pub static INSERT: &str = "
+INSERT INTO dummy_table (nonce, balance) VALUES ($1, $2)
+   ";
+
+pub static SELECT: &str = "
+SELECT account_id, nonce, balance FROM dummy_table
+   ";
+
+pub static UPDATE: &str = "
+UPDATE dummy_table
+SET nonce = $1
+where
+  account_id = $2
+      ";
