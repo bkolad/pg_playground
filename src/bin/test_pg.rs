@@ -29,8 +29,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         nonce: 10,
         balance: 33,
     };
+
+    let acc2 = Account {
+        nonce: 101,
+        balance: 2333,
+    };
+    let accs = vec![acc, acc2];
     update_prepared(&pool).await?;
-    insert_prepared(&pool, &acc).await?;
+    batch_insert(&pool, accs).await?;
     read(&pool).await?;
     Ok(())
 }
@@ -85,6 +91,16 @@ pub async fn insert(pool: &ConnectionPool, acc: &Account) -> Result<(), Box<dyn 
     Ok(())
 }
 
+pub async fn batch_insert(pool: &ConnectionPool, accs: Vec<Account>) -> Result<(), Box<dyn Error>> {
+    let mut connection = pool.get().await?;
+    let trs = connection.transaction().await?;
+    let sql: &str = &generate(accs);
+
+    trs.execute(sql, &[]).await?;
+    trs.commit().await?;
+    Ok(())
+}
+
 pub async fn create_tables(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
     let connection = pool.get().await?;
     connection.execute(SQL::DUMMY_TABLE, &[]).await?;
@@ -96,4 +112,21 @@ pub async fn drop_tables(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
     connection.execute(SQL::DROP_DUMMY_TABLE, &[]).await?;
 
     Ok(())
+}
+
+fn generate(accs: Vec<Account>) -> String {
+    let mut e = "INSERT INTO dummy_table (nonce, balance) VALUES
+    "
+    .to_string();
+
+    for i in 0..accs.len() - 1 {
+        let acc = &accs[i];
+        let v = format!("({}, {}), ", acc.nonce, acc.balance);
+        e.push_str(&v)
+    }
+    let acc = &accs[accs.len() - 1];
+    let v = format!("({}, {});", acc.nonce, acc.balance);
+    e.push_str(&v);
+    println!("E: {}", e);
+    e
 }

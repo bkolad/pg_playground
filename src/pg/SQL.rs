@@ -11,6 +11,10 @@ pub static INSERT: &str = "
 INSERT INTO dummy_table (nonce, balance) VALUES ($1, $2)
    ";
 
+pub static BATCH_INSERT: &str = "
+   INSERT INTO dummy_table (nonce, balance) VALUES (1, 2), (9, 20);
+      ";
+
 pub static SELECT: &str = "
 SELECT account_id, nonce, balance FROM dummy_table
    ";
