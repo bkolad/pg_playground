@@ -12,6 +12,12 @@ pub struct Account {
     balance: i64,
 }
 
+pub struct UpdatedAcc {
+    account_id: i32,
+    nonce: i32,
+    balance: i64,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let config = Config::from_str("postgresql://postgres:dev@127.0.0.1:5432")?;
@@ -24,20 +30,108 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // drop_tables(&pool).await;
-    // create_tables(&pool).await?;
-    let acc = Account {
-        nonce: 10,
-        balance: 33,
-    };
+    //create_tables(&pool).await?;
+    // read(&pool).await?;
+    //let accs = generate_accounts(1000);
+    // massive_insert(&pool, accs).await?;
 
-    let acc2 = Account {
-        nonce: 101,
-        balance: 2333,
-    };
-    let accs = vec![acc, acc2];
-    update_prepared(&pool).await?;
-    batch_insert(&pool, accs).await?;
-    read(&pool).await?;
+    let updated_accs = generate_updated_accounts(100);
+    massive_update(&pool, updated_accs).await?;
+    Ok(())
+}
+
+pub async fn massive_insert(
+    pool: &ConnectionPool,
+    accs: Vec<Account>,
+) -> Result<(), Box<dyn Error>> {
+    let mut connection = pool.get().await?;
+    let trs = connection.transaction().await?;
+    let sql: &str = &massive_insert_sql(accs);
+
+    trs.execute(sql, &[]).await?;
+    trs.commit().await?;
+    Ok(())
+}
+
+fn massive_insert_sql(accs: Vec<Account>) -> String {
+    let mut sql = "INSERT INTO dummy_table (nonce, balance) VALUES".to_string();
+
+    for i in 0..accs.len() - 1 {
+        let acc = &accs[i];
+        let v = format!("({}, {}), ", acc.nonce, acc.balance);
+        sql.push_str(&v)
+    }
+    let acc = &accs[accs.len() - 1];
+    let v = format!("({}, {});", acc.nonce, acc.balance);
+    sql.push_str(&v);
+    sql
+}
+
+pub async fn massive_update(
+    pool: &ConnectionPool,
+    accs: Vec<UpdatedAcc>,
+) -> Result<(), Box<dyn Error>> {
+    let mut connection = pool.get().await?;
+    let trs = connection.transaction().await?;
+    let sql: &str = &massive_update_sql(accs);
+
+    trs.execute(sql, &[]).await?;
+    trs.commit().await?;
+    Ok(())
+}
+
+fn massive_update_sql(accs: Vec<UpdatedAcc>) -> String {
+    let mut sql =
+        "UPDATE dummy_table SET nonce = tmp.nonce, balance=tmp.balance FROM( VALUES".to_string();
+
+    for i in 0..accs.len() - 1 {
+        let acc = &accs[i];
+        let v = format!("({}, {}, {}), ", acc.account_id, acc.nonce, acc.balance);
+        sql.push_str(&v)
+    }
+    let acc = &accs[accs.len() - 1];
+    let v = format!("({}, {}, {})) ", acc.account_id, acc.nonce, acc.balance);
+    sql.push_str(&v);
+    let x = "as tmp (account_id, nonce, balance) where dummy_table.account_id = tmp.account_id;";
+    sql.push_str(x);
+    sql
+}
+
+fn generate_updated_accounts(n: u32) -> Vec<UpdatedAcc> {
+    let mut updated_accs = vec![];
+    for i in 0..n {
+        updated_accs.push(UpdatedAcc {
+            account_id: i as i32,
+            nonce: 99,
+            balance: 11,
+        })
+    }
+    updated_accs
+}
+
+fn generate_accounts(n: u32) -> Vec<Account> {
+    let mut accs = vec![];
+    for i in 0..n {
+        accs.push(Account {
+            nonce: 22,
+            balance: 33,
+        })
+    }
+    accs
+}
+
+///========
+
+pub async fn create_tables(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
+    let connection = pool.get().await?;
+    connection.execute(SQL::DUMMY_TABLE, &[]).await?;
+    Ok(())
+}
+
+pub async fn drop_tables(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
+    let connection = pool.get().await?;
+    connection.execute(SQL::DROP_DUMMY_TABLE, &[]).await?;
+
     Ok(())
 }
 
@@ -89,44 +183,4 @@ pub async fn insert(pool: &ConnectionPool, acc: &Account) -> Result<(), Box<dyn 
         .await?;
 
     Ok(())
-}
-
-pub async fn batch_insert(pool: &ConnectionPool, accs: Vec<Account>) -> Result<(), Box<dyn Error>> {
-    let mut connection = pool.get().await?;
-    let trs = connection.transaction().await?;
-    let sql: &str = &generate(accs);
-
-    trs.execute(sql, &[]).await?;
-    trs.commit().await?;
-    Ok(())
-}
-
-pub async fn create_tables(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
-    let connection = pool.get().await?;
-    connection.execute(SQL::DUMMY_TABLE, &[]).await?;
-    Ok(())
-}
-
-pub async fn drop_tables(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
-    let connection = pool.get().await?;
-    connection.execute(SQL::DROP_DUMMY_TABLE, &[]).await?;
-
-    Ok(())
-}
-
-fn generate(accs: Vec<Account>) -> String {
-    let mut e = "INSERT INTO dummy_table (nonce, balance) VALUES
-    "
-    .to_string();
-
-    for i in 0..accs.len() - 1 {
-        let acc = &accs[i];
-        let v = format!("({}, {}), ", acc.nonce, acc.balance);
-        e.push_str(&v)
-    }
-    let acc = &accs[accs.len() - 1];
-    let v = format!("({}, {});", acc.nonce, acc.balance);
-    e.push_str(&v);
-    println!("E: {}", e);
-    e
 }
