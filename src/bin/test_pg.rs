@@ -35,11 +35,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // drop_tables(&pool).await;
     //create_tables(&pool).await?;
     // read(&pool).await?;
-    // let accs = generate_accounts(15000);
-    // massive_insert(&pool, accs).await?;
-
-    let updated_accs = generate_updated_accounts(15000);
-    massive_update(&pool, updated_accs).await?;
+    let accs = generate_accounts(10000);
+    batch_insert(&pool, accs).await?;
+    println!();
+    let updated_accs = generate_updated_accounts(10000);
+    batch_update(&pool, updated_accs).await?;
     bulk_read(&pool).await?;
     Ok(())
 }
@@ -50,13 +50,11 @@ pub async fn bulk_read(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
 
     let stream = trs
         .copy_out("COPY dummy_table (account_id, nonce, balance) TO STDIN BINARY")
-        .await
-        .unwrap();
+        .await?;
 
     let rows = BinaryCopyOutStream::new(stream, &[Type::INT4, Type::INT4, Type::INT8])
         .try_collect::<Vec<_>>()
-        .await
-        .unwrap();
+        .await?;
     trs.commit().await?;
 
     for row in rows {
@@ -70,20 +68,19 @@ pub async fn bulk_read(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub async fn massive_insert(
-    pool: &ConnectionPool,
-    accs: Vec<Account>,
-) -> Result<(), Box<dyn Error>> {
+pub async fn batch_insert(pool: &ConnectionPool, accs: Vec<Account>) -> Result<(), Box<dyn Error>> {
     let mut connection = pool.get().await?;
     let trs = connection.transaction().await?;
-    let sql: &str = &massive_insert_sql(accs);
-
+    let sql: &str = &batch_insert_sql(accs);
     trs.execute(sql, &[]).await?;
     trs.commit().await?;
     Ok(())
 }
 
-fn massive_insert_sql(accs: Vec<Account>) -> String {
+fn batch_insert_sql(accs: Vec<Account>) -> String {
+    //batch insert syntax
+    //SQL INSERT INTO dummy_table (nonce, balance) VALUES(22, 33), (22, 33);
+
     let mut sql = "INSERT INTO dummy_table (nonce, balance) VALUES".to_string();
 
     for i in 0..accs.len() - 1 {
@@ -97,7 +94,7 @@ fn massive_insert_sql(accs: Vec<Account>) -> String {
     sql
 }
 
-pub async fn massive_update(
+pub async fn batch_update(
     pool: &ConnectionPool,
     accs: Vec<UpdatedAcc>,
 ) -> Result<(), Box<dyn Error>> {
@@ -110,7 +107,10 @@ pub async fn massive_update(
     Ok(())
 }
 
-fn massive_update_sql(accs: Vec<UpdatedAcc>) -> String {
+fn batch_update_sql(accs: Vec<UpdatedAcc>) -> String {
+    //batch update syntax
+    //SQL UPDATE dummy_table SET nonce = tmp.nonce, balance=tmp.balance FROM( VALUES(0, 999, 89), (1, 999, 89)) as tmp (account_id, nonce, balance) where dummy_table.account_id = tmp.account_id;
+
     let mut sql =
         "UPDATE dummy_table SET nonce = tmp.nonce, balance=tmp.balance FROM( VALUES".to_string();
 
