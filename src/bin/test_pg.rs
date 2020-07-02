@@ -32,15 +32,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Err(e) => panic!("builder error: {:?}", e),
     };
 
-    // drop_tables(&pool).await;
-    //create_tables(&pool).await?;
+    drop_tables(&pool).await?;
+    create_tables(&pool).await?;
     // read(&pool).await?;
-    let accs = generate_accounts(10000);
+    let accs = generate_accounts(50000);
     batch_insert(&pool, accs).await?;
-    println!();
-    let updated_accs = generate_updated_accounts(10000);
+    // println!();
+    let updated_accs = generate_updated_accounts(50000);
     batch_update(&pool, updated_accs).await?;
     bulk_read(&pool).await?;
+    //bulk_write(&pool).await?;
     Ok(())
 }
 
@@ -65,6 +66,30 @@ pub async fn bulk_read(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
             row.get::<i64>(2)
         );
     }
+    Ok(())
+}
+
+pub async fn bulk_write(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
+    drop_tables(&pool).await?;
+
+    create_tables(&pool).await?;
+    let mut connection = pool.get().await?;
+    let trs = connection.transaction().await?;
+    let sink = trs
+        .copy_in("COPY dummy_table (account_id, nonce, balance) FROM STDIN BINARY")
+        .await
+        .unwrap();
+
+    let writer = BinaryCopyInWriter::new(sink, &[Type::INT4, Type::INT4, Type::INT8]);
+    pin_mut!(writer);
+    for i in 0..1000 {
+        println!("{}", i);
+        writer.as_mut().write(&[&i, &1, &2i64]).await?;
+    }
+
+    writer.finish().await?;
+    trs.commit().await?;
+
     Ok(())
 }
 
