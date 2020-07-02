@@ -100,7 +100,7 @@ pub async fn batch_update(
 ) -> Result<(), Box<dyn Error>> {
     let mut connection = pool.get().await?;
     let trs = connection.transaction().await?;
-    let sql: &str = &massive_update_sql(accs);
+    let sql: &str = &batch_update_sql(accs);
 
     trs.execute(sql, &[]).await?;
     trs.commit().await?;
