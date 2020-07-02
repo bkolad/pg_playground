@@ -5,7 +5,10 @@ use pg_playground::pg::SQL;
 use std::str::FromStr;
 use tokio_postgres::{Config, Connection, NoTls};
 type ConnectionPool = Pool<PostgresConnectionManager<NoTls>>;
+use futures::{pin_mut, TryStreamExt};
 use std::error::Error;
+use tokio_postgres::binary_copy::{BinaryCopyInWriter, BinaryCopyOutStream};
+use tokio_postgres::types::Type;
 
 pub struct Account {
     nonce: i32,
@@ -32,11 +35,38 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // drop_tables(&pool).await;
     //create_tables(&pool).await?;
     // read(&pool).await?;
-    //let accs = generate_accounts(1000);
+    // let accs = generate_accounts(15000);
     // massive_insert(&pool, accs).await?;
 
-    let updated_accs = generate_updated_accounts(100);
+    let updated_accs = generate_updated_accounts(15000);
     massive_update(&pool, updated_accs).await?;
+    bulk_read(&pool).await?;
+    Ok(())
+}
+
+pub async fn bulk_read(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
+    let mut connection = pool.get().await?;
+    let trs = connection.transaction().await?;
+
+    let stream = trs
+        .copy_out("COPY dummy_table (account_id, nonce, balance) TO STDIN BINARY")
+        .await
+        .unwrap();
+
+    let rows = BinaryCopyOutStream::new(stream, &[Type::INT4, Type::INT4, Type::INT8])
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
+    trs.commit().await?;
+
+    for row in rows {
+        println!(
+            "ROW {} {} {}",
+            row.get::<i32>(0),
+            row.get::<i32>(1),
+            row.get::<i64>(2)
+        );
+    }
     Ok(())
 }
 
@@ -102,8 +132,8 @@ fn generate_updated_accounts(n: u32) -> Vec<UpdatedAcc> {
     for i in 0..n {
         updated_accs.push(UpdatedAcc {
             account_id: i as i32,
-            nonce: 99,
-            balance: 11,
+            nonce: 999,
+            balance: 89,
         })
     }
     updated_accs
@@ -120,7 +150,7 @@ fn generate_accounts(n: u32) -> Vec<Account> {
     accs
 }
 
-///========
+///======== MISC
 
 pub async fn create_tables(pool: &ConnectionPool) -> Result<(), Box<dyn Error>> {
     let connection = pool.get().await?;

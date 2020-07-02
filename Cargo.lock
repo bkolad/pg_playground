@@ -527,6 +527,7 @@ version = "0.1.0"
 dependencies = [
  "bb8",
  "bb8-postgres",
+ "futures",
  "tokio",
  "tokio-postgres",
 ]
